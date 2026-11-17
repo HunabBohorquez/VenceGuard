@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VenceGuard — Control Preventivo de Vencimientos y Mantenimiento</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand">
+        <div class="brand-logo" aria-hidden="true">VG</div>
+        <div>
+          <h1>VenceGuard</h1>
+          <p class="subtitle">Control Preventivo de Vencimientos, Garantías y Bitácora Técnica</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btnLoadDemo" class="btn btn-secondary" type="button">Cargar Inventario Demo</button>
+        <button id="btnExportCSV" class="btn btn-outline" type="button">Exportar CSV</button>
+        <button id="btnExportJSON" class="btn btn-outline" type="button">Exportar JSON</button>
+        <button id="btnOpenModal" class="btn btn-primary" type="button">+ Nuevo Registro</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-container">
+    <!-- Tarjetas de KPI / Filtros de Semáforo -->
+    <section class="kpi-grid" aria-label="Resumen de estados del semáforo">
+      <button class="kpi-card active" data-filter-status="ALL" type="button">
+        <span class="kpi-label">Todos los Registros</span>
+        <strong class="kpi-value" id="kpiTotal">0</strong>
+        <span class="kpi-meta" id="kpiTotalCost">Inversión acumulada: $0.00</span>
+      </button>
+      <button class="kpi-card kpi-expired" data-filter-status="EXPIRED" type="button">
+        <span class="kpi-label">Vencidos (&lt; 0 días)</span>
+        <strong class="kpi-value" id="kpiExpired">0</strong>
+        <span class="kpi-meta">Acción inmediata</span>
+      </button>
+      <button class="kpi-card kpi-urgent" data-filter-status="URGENT" type="button">
+        <span class="kpi-label">Urgentes (0 – 7 días)</span>
+        <strong class="kpi-value" id="kpiUrgent">0</strong>
+        <span class="kpi-meta">Esta semana</span>
+      </button>
+      <button class="kpi-card kpi-upcoming" data-filter-status="UPCOMING" type="button">
+        <span class="kpi-label">Próximos (8 – 30 días)</span>
+        <strong class="kpi-value" id="kpiUpcoming">0</strong>
+        <span class="kpi-meta">Planificar servicio</span>
+      </button>
+      <button class="kpi-card kpi-valid" data-filter-status="VALID" type="button">
+        <span class="kpi-label">Vigentes (&gt; 30 días)</span>
+        <strong class="kpi-value" id="kpiValid">0</strong>
+        <span class="kpi-meta">Bajo control</span>
+      </button>
+    </section>
+
+    <!-- Panel Analítico: Gráfico Canvas + Bitácora Histórica -->
+    <section class="analytics-grid">
+      <article class="panel chart-panel">
+        <div class="panel-header">
+          <h2>Distribución Analítica</h2>
+          <div class="chart-toggle" role="group" aria-label="Modo de gráfico">
+            <button id="btnChartByStatus" class="toggle-btn active" type="button">Por Estado</button>
+            <button id="btnChartByCategory" class="toggle-btn" type="button">Gasto por Categoría</button>
+          </div>
+        </div>
+        <div class="canvas-wrapper">
+          <canvas id="analyticsCanvas" width="600" height="260"></canvas>
+        </div>
+      </article>
+
+      <article class="panel log-panel">
+        <div class="panel-header">
+          <h2>Bitácora Histórica de Servicios</h2>
+          <button id="btnClearLog" class="btn-link" type="button">Limpiar historial</button>
+        </div>
+        <div id="serviceLogList" class="log-list">
+          <p class="empty-hint">Aún no se han registrado renovaciones o mantenimientos ejecutados.</p>
+        </div>
+      </article>
+    </section>
+
+    <!-- Barra de Búsqueda y Filtro por Categoría -->
+    <section class="toolbar" aria-label="Herramientas de filtrado">
+      <div class="search-box">
+        <label for="searchInput" class="sr-only">Buscar ítem o nota técnica</label>
+        <input id="searchInput" type="search" placeholder="Buscar por equipo, ítem o notas técnicas..." />
+      </div>
+      <div class="filter-box">
+        <label for="categoryFilter" class="sr-only">Filtrar por categoría</label>
+        <select id="categoryFilter">
+          <option value="ALL">Todas las categorías</option>
+          <option value="Garantías y Electrónica">Garantías y Electrónica</option>
+          <option value="Mantenimiento PC y Lab">Mantenimiento PC y Lab</option>
+          <option value="Documentos y Trámites">Documentos y Trámites</option>
+          <option value="Seguros y Licencias">Seguros y Licencias</option>
+          <option value="Hogar y Vehículo">Hogar y Vehículo</option>
+        </select>
+      </div>
+      <button id="btnResetFilters" class="btn btn-outline" type="button">Restablecer filtros</button>
+    </section>
+
+    <!-- Listado de Tarjetas Preventivas -->
+    <section id="itemsContainer" class="cards-grid" aria-live="polite"></section>
+  </main>
+
+  <!-- Modal CRUD para Crear / Editar Registro -->
+  <dialog id="itemModal" class="modal">
+    <form id="itemForm" class="modal-form" method="dialog">
+      <div class="modal-header">
+        <h2 id="modalTitle">Nuevo Registro Preventivo</h2>
+        <button id="btnCloseModal" class="icon-close" type="button" aria-label="Cerrar ventana">&times;</button>
+      </div>
+
+      <input type="hidden" id="itemId" />
+
+      <div class="form-grid">
+        <div class="form-group full-width">
+          <label for="itemName">Nombre del ítem / equipo *</label>
+          <input id="itemName" type="text" required placeholder="Ej. Cambio de pasta térmica Workstation / Garantía Laptop" />
+        </div>
+
+        <div class="form-group">
+          <label for="itemCategory">Categoría *</label>
+          <select id="itemCategory" required>
+            <option value="Garantías y Electrónica">Garantías y Electrónica</option>
+            <option value="Mantenimiento PC y Lab">Mantenimiento PC y Lab</option>
+            <option value="Documentos y Trámites">Documentos y Trámites</option>
+            <option value="Seguros y Licencias">Seguros y Licencias</option>
+            <option value="Hogar y Vehículo">Hogar y Vehículo</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="itemCycle">Ciclo de renovación (días) *</label>
+          <input id="itemCycle" type="number" min="1" max="3650" value="180" required />
+        </div>
+
+        <div class="form-group">
+          <label for="itemLastDate">Fecha último evento / compra *</label>
+          <input id="itemLastDate" type="date" required />
+        </div>
+
+        <div class="form-group">
+          <label for="itemNextDate">Fecha próximo vencimiento / servicio *</label>
+          <input id="itemNextDate" type="date" required />
+        </div>
+
+        <div class="form-group">
+          <label for="itemCost">Costo estimado / pagado ($) *</label>
+          <input id="itemCost" type="number" min="0" step="0.01" value="0.00" required />
+        </div>
+
+        <div class="form-group full-width">
+          <label for="itemNotes">Notas técnicas / Especificaciones</label>
+          <textarea id="itemNotes" rows="3" placeholder="Número de serie, proveedor, modelo de refacción o condiciones de garantía..."></textarea>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="btnCancelModal" class="btn btn-outline" type="button">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar Registro</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
